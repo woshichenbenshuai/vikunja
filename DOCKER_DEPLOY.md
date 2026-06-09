@@ -31,7 +31,7 @@ Edit `.env` and set:
 ```env
 VIKUNJA_PUBLIC_URL=http://your-server-ip:17003/
 POSTGRES_PASSWORD=your-db-password
-VIKUNJA_JWT_SECRET=your-long-random-secret
+VIKUNJA_SERVICE_SECRET=your-long-random-secret
 ```
 
 Then start:
@@ -51,5 +51,18 @@ Open:
 ```text
 http://your-server-ip:17003
 ```
+
+## Fix Existing Permission Error
+
+If an older deployment created `docker-data/files` as `root`, run:
+
+```bash
+docker compose down
+sudo mkdir -p docker-data/files
+sudo chown -R 1000:1000 docker-data/files
+docker compose up -d --build
+```
+
+The compose file also includes an `init-permissions` service that fixes this automatically on startup.
 
 Persistent data is stored in `docker-data/`.
