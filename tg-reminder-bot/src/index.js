@@ -7,6 +7,8 @@ const text = {
   taskLink: '\u4efb\u52a1\u94fe\u63a5',
   nextDue: '\u4e0b\u6b21\u4fdd\u6d3b\u65f6\u95f4',
   noDue: '\u672a\u8bbe\u7f6e',
+  keepaliveCommand: '\u7b7e\u5230\u547d\u4ee4',
+  openTask: '\u6253\u5f00\u4efb\u52a1',
   noTasks: '\u6ca1\u6709\u672a\u5b8c\u6210\u4efb\u52a1',
   listTitle: '\u4efb\u52a1\u5217\u8868',
   commandMissing: '\u8bf7\u4f7f\u7528\uff1a/keepalive <\u4efb\u52a1ID\u6216\u4efb\u52a1\u540d>',
@@ -172,6 +174,7 @@ async function handleListCommand(chatId) {
   }
 
   const lines = [`<b>${text.listTitle}</b>`]
+  lines.push(`\u5171 ${tasks.length} \u4e2a\u672a\u5b8c\u6210\u4efb\u52a1`)
   for (const task of tasks.slice(0, 50)) {
     lines.push(formatTaskListLine(task))
   }
@@ -190,7 +193,14 @@ async function handleListCommand(chatId) {
 function formatTaskListLine(task) {
   const dueDate = parseDate(task.due_date)
   const due = dueDate ? formatInTimezone(dueDate) : text.noDue
-  return `#${task.id} ${escapeHtml(task.title)}\n${text.nextDue}: ${escapeHtml(due)}`
+  return [
+    '',
+    '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501',
+    `<b>#${task.id} ${escapeHtml(task.title)}</b>`,
+    `${text.nextDue}: <b>${escapeHtml(due)}</b>`,
+    `${text.keepaliveCommand}: <code>/keepalive ${task.id}</code>`,
+    `${text.openTask}: ${escapeHtml(taskUrl(task.id))}`,
+  ].join('\n')
 }
 
 async function handleKeepaliveCommand(chatId, query) {
