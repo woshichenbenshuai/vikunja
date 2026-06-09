@@ -56,6 +56,15 @@ http://your-server-ip:17003
 
 The bot pushes tasks whose due date is within `TG_REMINDER_LOOKAHEAD_DAYS` and are not done. Each message has a `完成签到` button. Pressing it marks the Vikunja task as done, which also triggers Vikunja's repeat logic.
 
+It also supports Telegram commands:
+
+```text
+/list
+/keepalive <task-id-or-task-name>
+```
+
+`/list` shows unfinished tasks with their task id, title, and next due time. `/keepalive` marks the matched task as done. Matching by id is preferred; matching by title supports exact or partial title matches, but asks you to use an id if multiple tasks match.
+
 ### 1. Create Telegram bot token
 
 Open Telegram and talk to `@BotFather`:

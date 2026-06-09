@@ -1,6 +1,39 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
+const text = {
+  unauthorized: '\u8fd9\u4e2a\u804a\u5929\u672a\u6388\u6743',
+  unknownAction: '\u672a\u77e5\u64cd\u4f5c',
+  doneOk: '\u5df2\u5b8c\u6210\u7b7e\u5230',
+  doneFail: '\u5b8c\u6210\u5931\u8d25\uff0c\u8bf7\u67e5\u770b Bot \u65e5\u5fd7',
+  keepaliveButton: '\u5b8c\u6210\u7b7e\u5230',
+  openTaskButton: '\u6253\u5f00\u4efb\u52a1',
+  dueSoonTitle: '\u4efb\u52a1\u5feb\u5230\u671f',
+  doneTitle: '\u5df2\u5b8c\u6210\u7b7e\u5230',
+  title: '\u6807\u9898',
+  due: '\u5230\u671f',
+  project: '\u9879\u76ee',
+  taskLink: '\u4efb\u52a1\u94fe\u63a5',
+  nextDue: '\u4e0b\u6b21\u4fdd\u6d3b\u65f6\u95f4',
+  noDue: '\u672a\u8bbe\u7f6e',
+  noTasks: '\u6ca1\u6709\u672a\u5b8c\u6210\u4efb\u52a1',
+  listTitle: '\u4efb\u52a1\u5217\u8868',
+  commandMissing: '\u8bf7\u4f7f\u7528\uff1a/keepalive <\u4efb\u52a1ID\u6216\u4efb\u52a1\u540d>',
+  taskNotFound: '\u6ca1\u627e\u5230\u5339\u914d\u7684\u672a\u5b8c\u6210\u4efb\u52a1',
+  multipleMatches: '\u627e\u5230\u591a\u4e2a\u5339\u914d\u4efb\u52a1\uff0c\u8bf7\u7528 ID \u7b7e\u5230',
+  help: [
+    'Vikunja \u4fdd\u6d3b\u63d0\u9192\u673a\u5668\u4eba\u5df2\u542f\u7528\u3002',
+    '',
+    '\u547d\u4ee4\uff1a',
+    '/list - \u67e5\u8be2\u5168\u90e8\u672a\u5b8c\u6210\u4efb\u52a1\u548c\u4e0b\u6b21\u4fdd\u6d3b\u65f6\u95f4',
+    '/keepalive <\u4efb\u52a1ID\u6216\u4efb\u52a1\u540d> - \u5b8c\u6210\u7b7e\u5230',
+    '',
+    '\u793a\u4f8b\uff1a',
+    '/keepalive 12',
+    '/keepalive gv\u4fdd\u6d3b',
+  ].join('\n'),
+}
+
 const config = {
   telegramToken: requiredEnv('TELEGRAM_BOT_TOKEN'),
   chatIds: requiredEnv('TELEGRAM_CHAT_IDS').split(',').map(v => v.trim()).filter(Boolean),
@@ -85,32 +118,43 @@ async function sendDueSoonReminders() {
 }
 
 async function getDueSoonTasks() {
-  const now = new Date()
-  const until = new Date(now.getTime() + config.lookaheadDays * 24 * 60 * 60 * 1000)
-  const filter = `done = false && due_date <= '${until.toISOString()}'`
-  const params = new URLSearchParams({
-    filter,
+  const until = new Date(Date.now() + config.lookaheadDays * 24 * 60 * 60 * 1000)
+  return getTasks({
+    filter: `done = false && due_date <= '${until.toISOString()}'`,
     sort_by: 'due_date',
     order_by: 'asc',
     per_page: '100',
   })
+}
 
-  return vikunjaJson(`/api/v1/tasks?${params.toString()}`)
+async function getOpenTasks(search = '') {
+  return getTasks({
+    filter: 'done = false',
+    sort_by: 'due_date',
+    order_by: 'asc',
+    per_page: '100',
+    ...(search ? { s: search } : {}),
+  })
+}
+
+async function getTasks(query) {
+  const params = new URLSearchParams(query)
+  const result = await vikunjaJson(`/api/v1/tasks?${params.toString()}`)
+  return Array.isArray(result) ? result : result?.items || []
 }
 
 async function sendTaskReminder(task, dueDate, stateKey) {
-  const text = formatTaskMessage(task, dueDate)
   const keyboard = {
     inline_keyboard: [[
-      { text: '完成签到', callback_data: `done:${task.id}` },
-      { text: '打开任务', url: `${config.publicUrl}tasks/${task.id}` },
+      { text: text.keepaliveButton, callback_data: `done:${task.id}` },
+      { text: text.openTaskButton, url: taskUrl(task.id) },
     ]],
   }
 
   for (const chatId of config.chatIds) {
     await telegramJson('sendMessage', {
       chat_id: chatId,
-      text,
+      text: formatTaskMessage(task, dueDate),
       parse_mode: 'HTML',
       reply_markup: keyboard,
       disable_web_page_preview: true,
@@ -122,13 +166,13 @@ async function sendTaskReminder(task, dueDate, stateKey) {
 function formatTaskMessage(task, dueDate) {
   const project = task.project_id ? `#${task.project_id}` : '-'
   return [
-    '⏰ <b>任务快到期</b>',
+    `<b>${text.dueSoonTitle}</b>`,
     '',
     `<b>${escapeHtml(task.title)}</b>`,
-    `到期：${escapeHtml(formatInTimezone(dueDate))}`,
-    `项目：${escapeHtml(project)}`,
+    `${text.due}: ${escapeHtml(formatInTimezone(dueDate))}`,
+    `${text.project}: ${escapeHtml(project)}`,
     '',
-    `任务链接：${escapeHtml(config.publicUrl)}tasks/${task.id}`,
+    `${text.taskLink}: ${escapeHtml(taskUrl(task.id))}`,
   ].join('\n')
 }
 
@@ -156,20 +200,20 @@ async function pollTelegramUpdates() {
 async function handleCallback(callback) {
   const chatId = String(callback.message?.chat?.id || '')
   if (!isAllowedChat(chatId)) {
-    await answerCallback(callback.id, '这个聊天未授权')
+    await answerCallback(callback.id, text.unauthorized)
     return
   }
 
   const [action, taskIdRaw] = String(callback.data || '').split(':')
   const taskId = Number(taskIdRaw)
   if (action !== 'done' || !Number.isInteger(taskId) || taskId <= 0) {
-    await answerCallback(callback.id, '未知操作')
+    await answerCallback(callback.id, text.unknownAction)
     return
   }
 
   try {
     const updatedTask = await markTaskDone(taskId)
-    await answerCallback(callback.id, '已完成签到')
+    await answerCallback(callback.id, text.doneOk)
     await telegramJson('editMessageText', {
       chat_id: callback.message.chat.id,
       message_id: callback.message.message_id,
@@ -179,7 +223,7 @@ async function handleCallback(callback) {
     })
   } catch (err) {
     logError(`Failed to mark task ${taskId} done`, err)
-    await answerCallback(callback.id, '完成失败，请看 Bot 日志')
+    await answerCallback(callback.id, text.doneFail)
   }
 }
 
@@ -187,13 +231,112 @@ async function handleMessage(message) {
   const chatId = String(message.chat?.id || '')
   if (!isAllowedChat(chatId)) return
 
-  const text = String(message.text || '').trim()
-  if (text === '/start' || text === '/help') {
-    await telegramJson('sendMessage', {
-      chat_id: chatId,
-      text: 'Vikunja 保活提醒机器人已启用。\n\n会自动推送快到期任务，点击“完成签到”即可完成任务并触发重复规则。',
-    })
+  const raw = String(message.text || '').trim()
+  const command = normalizeCommand(raw)
+
+  try {
+    if (command === '/start' || command === '/help') {
+      await sendPlainMessage(chatId, text.help)
+      return
+    }
+
+    if (command === '/list') {
+      await handleListCommand(chatId)
+      return
+    }
+
+    if (command.startsWith('/keepalive')) {
+      await handleKeepaliveCommand(chatId, raw.replace(/^\/keepalive(?:@\w+)?\s*/i, '').trim())
+      return
+    }
+  } catch (err) {
+    logError(`Failed to handle command ${raw}`, err)
+    await sendPlainMessage(chatId, text.doneFail)
   }
+}
+
+function normalizeCommand(raw) {
+  const first = raw.split(/\s+/, 1)[0].toLowerCase()
+  return first.replace(/@\w+$/, '')
+}
+
+async function handleListCommand(chatId) {
+  const tasks = await getOpenTasks()
+  if (tasks.length === 0) {
+    await sendPlainMessage(chatId, text.noTasks)
+    return
+  }
+
+  const lines = [`<b>${text.listTitle}</b>`]
+  for (const task of tasks.slice(0, 50)) {
+    lines.push(formatTaskListLine(task))
+  }
+  if (tasks.length > 50) {
+    lines.push(`... ${tasks.length - 50} more`)
+  }
+
+  await telegramJson('sendMessage', {
+    chat_id: chatId,
+    text: lines.join('\n'),
+    parse_mode: 'HTML',
+    disable_web_page_preview: true,
+  })
+}
+
+function formatTaskListLine(task) {
+  const dueDate = parseDate(task.due_date)
+  const due = dueDate ? formatInTimezone(dueDate) : text.noDue
+  return `#${task.id} ${escapeHtml(task.title)}\n${text.nextDue}: ${escapeHtml(due)}`
+}
+
+async function handleKeepaliveCommand(chatId, query) {
+  if (!query) {
+    await sendPlainMessage(chatId, text.commandMissing)
+    return
+  }
+
+  const task = await findTask(query)
+  if (!task) {
+    await sendPlainMessage(chatId, text.taskNotFound)
+    return
+  }
+
+  if (Array.isArray(task)) {
+    const lines = [text.multipleMatches, '']
+    for (const item of task.slice(0, 10)) {
+      lines.push(`#${item.id} ${item.title}`)
+    }
+    await sendPlainMessage(chatId, lines.join('\n'))
+    return
+  }
+
+  const updatedTask = await markTaskDone(task.id)
+  await telegramJson('sendMessage', {
+    chat_id: chatId,
+    text: formatDoneMessage(updatedTask),
+    parse_mode: 'HTML',
+    disable_web_page_preview: true,
+  })
+}
+
+async function findTask(query) {
+  const taskId = Number(query)
+  if (Number.isInteger(taskId) && taskId > 0) {
+    const task = await vikunjaJson(`/api/v1/tasks/${taskId}`)
+    return task.done ? null : task
+  }
+
+  const tasks = await getOpenTasks(query)
+  const normalizedQuery = query.trim().toLowerCase()
+  const exact = tasks.filter(task => String(task.title || '').trim().toLowerCase() === normalizedQuery)
+  if (exact.length === 1) return exact[0]
+  if (exact.length > 1) return exact
+
+  const partial = tasks.filter(task => String(task.title || '').toLowerCase().includes(normalizedQuery))
+  if (partial.length === 1) return partial[0]
+  if (partial.length > 1) return partial
+
+  return null
 }
 
 function isAllowedChat(chatId) {
@@ -212,16 +355,16 @@ async function markTaskDone(taskId) {
 function formatDoneMessage(task) {
   const dueDate = parseDate(task.due_date)
   const lines = [
-    '✅ <b>已完成签到</b>',
+    `<b>${text.doneTitle}</b>`,
     '',
     `<b>${escapeHtml(task.title)}</b>`,
   ]
 
   if (dueDate && !task.done) {
-    lines.push(`下一次到期：${escapeHtml(formatInTimezone(dueDate))}`)
+    lines.push(`${text.nextDue}: ${escapeHtml(formatInTimezone(dueDate))}`)
   }
 
-  lines.push(`任务链接：${escapeHtml(config.publicUrl)}tasks/${task.id}`)
+  lines.push(`${text.taskLink}: ${escapeHtml(taskUrl(task.id))}`)
   return lines.join('\n')
 }
 
@@ -237,8 +380,8 @@ async function vikunjaJson(path, options = {}) {
   })
 
   if (!response.ok) {
-    const text = await response.text()
-    throw new Error(`Vikunja API ${response.status} ${response.statusText}: ${text}`)
+    const body = await response.text()
+    throw new Error(`Vikunja API ${response.status} ${response.statusText}: ${body}`)
   }
 
   if (response.status === 204) return null
@@ -258,10 +401,18 @@ async function telegramJson(method, payload) {
   return body.result
 }
 
-async function answerCallback(callbackQueryId, text) {
+async function sendPlainMessage(chatId, message) {
+  await telegramJson('sendMessage', {
+    chat_id: chatId,
+    text: message,
+    disable_web_page_preview: true,
+  })
+}
+
+async function answerCallback(callbackQueryId, message) {
   await telegramJson('answerCallbackQuery', {
     callback_query_id: callbackQueryId,
-    text,
+    text: message,
     show_alert: false,
   })
 }
@@ -278,6 +429,10 @@ function formatInTimezone(date) {
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(date)
+}
+
+function taskUrl(taskId) {
+  return `${config.publicUrl}tasks/${taskId}`
 }
 
 function escapeHtml(value) {
