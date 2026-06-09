@@ -18,6 +18,15 @@ export default class ApiTokenService extends AbstractService<IApiToken> {
 			created: new Date(model.created).toISOString(),
 		}
 	}
+
+	beforeCreate(model: IApiToken) {
+		return {
+			title: model.title,
+			permissions: model.permissions,
+			expiresAt: new Date(model.expiresAt).toISOString(),
+			...(model.ownerId ? {ownerId: model.ownerId} : {}),
+		} as IApiToken
+	}
 	
 	modelFactory(data: Partial<IApiToken>) {
 		return new ApiTokenModel(data)

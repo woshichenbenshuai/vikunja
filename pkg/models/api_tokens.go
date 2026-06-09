@@ -64,6 +64,8 @@ type APIToken struct {
 
 const APITokenPrefix = `tk_`
 
+var apiTokenNoExpiryTime = time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
+
 func (*APIToken) TableName() string {
 	return "api_tokens"
 }
@@ -89,6 +91,9 @@ func GetAPITokenByID(s *xorm.Session, id int64) (token *APIToken, err error) {
 // @Router /tokens [put]
 func (t *APIToken) Create(s *xorm.Session, a web.Auth) (err error) {
 	t.ID = 0
+	if !t.ExpiresAt.After(time.Now()) {
+		t.ExpiresAt = apiTokenNoExpiryTime
+	}
 
 	salt, err := utils.CryptoRandomString(10)
 	if err != nil {
