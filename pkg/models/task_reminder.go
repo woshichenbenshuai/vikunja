@@ -344,13 +344,17 @@ func getTasksWithRemindersDueAndTheirUsers(s *xorm.Session, now time.Time, cond 
 func RegisterReminderCron() {
 	webhookEnabled := config.WebhooksEnabled.GetBool()
 	emailEnabled := config.ServiceEnableEmailReminders.GetBool() && config.MailerEnabled.GetBool()
+	_, _, telegramEnabled := telegramReminderConfig()
 
-	if !emailEnabled && !webhookEnabled {
+	if !emailEnabled && !webhookEnabled && !telegramEnabled {
 		return
 	}
 
 	if !emailEnabled {
 		log.Info("Mailer is disabled, not sending reminders per mail")
+	}
+	if telegramEnabled {
+		log.Info("Telegram reminder integration is enabled")
 	}
 
 	tz := config.GetTimeZone()
@@ -363,10 +367,10 @@ func RegisterReminderCron() {
 		now := time.Now()
 
 		// When only email is enabled, filter to email-enabled users for efficiency.
-		// When webhooks are enabled, we need all users so the event system can
-		// look up matching webhooks.
+		// When webhooks or Telegram are enabled, we need all users so the event system or Telegram delivery can
+		// reach users even when email reminders are disabled.
 		var cond builder.Cond
-		if emailEnabled && !webhookEnabled {
+		if emailEnabled && !webhookEnabled && !telegramEnabled {
 			cond = builder.Eq{"users.email_reminders_enabled": true}
 		}
 
@@ -382,12 +386,24 @@ func RegisterReminderCron() {
 
 		log.Debugf("[Task Reminder Cron] Sending %d reminders", len(reminders))
 
+		telegramSent := make(map[int64]bool)
+
 		for _, n := range reminders {
 			if emailEnabled && n.User.EmailRemindersEnabled {
 				err = notifications.Notify(n.User, n, s)
 				if err != nil {
 					log.Errorf("[Task Reminder Cron] Could not notify user %d: %s", n.User.ID, err)
 					return
+				}
+			}
+
+			if telegramEnabled {
+				if !telegramSent[n.Task.ID] {
+					err = sendTelegramTaskReminder(n)
+					if err != nil {
+						log.Errorf("[Task Reminder Cron] Could not send telegram reminder for task %d: %s", n.Task.ID, err)
+					}
+					telegramSent[n.Task.ID] = true
 				}
 			}
 

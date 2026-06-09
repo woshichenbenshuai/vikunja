@@ -1,18 +1,9 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
-
 const text = {
   unauthorized: '\u8fd9\u4e2a\u804a\u5929\u672a\u6388\u6743',
   unknownAction: '\u672a\u77e5\u64cd\u4f5c',
   doneOk: '\u5df2\u5b8c\u6210\u7b7e\u5230',
   doneFail: '\u5b8c\u6210\u5931\u8d25\uff0c\u8bf7\u67e5\u770b Bot \u65e5\u5fd7',
-  keepaliveButton: '\u5b8c\u6210\u7b7e\u5230',
-  openTaskButton: '\u6253\u5f00\u4efb\u52a1',
-  dueSoonTitle: '\u4efb\u52a1\u5feb\u5230\u671f',
   doneTitle: '\u5df2\u5b8c\u6210\u7b7e\u5230',
-  title: '\u6807\u9898',
-  due: '\u5230\u671f',
-  project: '\u9879\u76ee',
   taskLink: '\u4efb\u52a1\u94fe\u63a5',
   nextDue: '\u4e0b\u6b21\u4fdd\u6d3b\u65f6\u95f4',
   noDue: '\u672a\u8bbe\u7f6e',
@@ -22,11 +13,13 @@ const text = {
   taskNotFound: '\u6ca1\u627e\u5230\u5339\u914d\u7684\u672a\u5b8c\u6210\u4efb\u52a1',
   multipleMatches: '\u627e\u5230\u591a\u4e2a\u5339\u914d\u4efb\u52a1\uff0c\u8bf7\u7528 ID \u7b7e\u5230',
   help: [
-    'Vikunja \u4fdd\u6d3b\u63d0\u9192\u673a\u5668\u4eba\u5df2\u542f\u7528\u3002',
+    'Vikunja \u4fdd\u6d3b\u673a\u5668\u4eba\u5df2\u542f\u7528\u3002',
     '',
     '\u547d\u4ee4\uff1a',
     '/list - \u67e5\u8be2\u5168\u90e8\u672a\u5b8c\u6210\u4efb\u52a1\u548c\u4e0b\u6b21\u4fdd\u6d3b\u65f6\u95f4',
     '/keepalive <\u4efb\u52a1ID\u6216\u4efb\u52a1\u540d> - \u5b8c\u6210\u7b7e\u5230',
+    '',
+    '\u8bf4\u660e\uff1aVikunja \u540e\u7aef\u4f1a\u6309\u4efb\u52a1\u81ea\u8eab\u7684\u63d0\u9192\u65f6\u95f4\u4e3b\u52a8\u63a8\u9001 TG\u3002',
     '',
     '\u793a\u4f8b\uff1a',
     '/keepalive 12',
@@ -40,37 +33,21 @@ const config = {
   vikunjaUrl: normalizeBaseUrl(requiredEnv('VIKUNJA_API_URL')),
   vikunjaToken: requiredEnv('VIKUNJA_API_TOKEN'),
   publicUrl: normalizePublicUrl(process.env.VIKUNJA_PUBLIC_URL || requiredEnv('VIKUNJA_API_URL')),
-  lookaheadDays: numberEnv('TG_REMINDER_LOOKAHEAD_DAYS', 3),
-  pollSeconds: numberEnv('TG_REMINDER_POLL_SECONDS', 300),
   timezone: process.env.TZ || 'Asia/Shanghai',
-  statePath: process.env.TG_REMINDER_STATE_PATH || '/data/state.json',
 }
 
 const telegramBaseUrl = `https://api.telegram.org/bot${config.telegramToken}`
 let updateOffset = 0
-let state = await loadState(config.statePath)
 
-log(`Starting Vikunja Telegram reminder bot. lookahead=${config.lookaheadDays}d poll=${config.pollSeconds}s chats=${config.chatIds.join(',')}`)
+log(`Starting Vikunja Telegram command bot. chats=${config.chatIds.join(',')}`)
 
 await pollTelegramUpdates()
-await sendDueSoonReminders()
 setInterval(() => void pollTelegramUpdates(), 1500)
-setInterval(() => void sendDueSoonReminders(), config.pollSeconds * 1000)
 
 function requiredEnv(name) {
   const value = process.env[name]
   if (!value) {
     throw new Error(`Missing required environment variable: ${name}`)
-  }
-  return value
-}
-
-function numberEnv(name, fallback) {
-  const raw = process.env[name]
-  if (!raw) return fallback
-  const value = Number(raw)
-  if (!Number.isFinite(value) || value <= 0) {
-    throw new Error(`${name} must be a positive number`)
   }
   return value
 }
@@ -81,50 +58,6 @@ function normalizeBaseUrl(url) {
 
 function normalizePublicUrl(url) {
   return url.replace(/\/+$/, '') + '/'
-}
-
-async function loadState(path) {
-  try {
-    return JSON.parse(await readFile(path, 'utf8'))
-  } catch (err) {
-    if (err.code !== 'ENOENT') throw err
-    return { sent: {} }
-  }
-}
-
-async function saveState() {
-  await mkdir(dirname(config.statePath), { recursive: true })
-  await writeFile(config.statePath, JSON.stringify(state, null, 2))
-}
-
-async function sendDueSoonReminders() {
-  try {
-    const tasks = await getDueSoonTasks()
-    for (const task of tasks) {
-      const dueDate = parseDate(task.due_date)
-      if (!dueDate) continue
-
-      const key = `${task.id}|${dueDate.toISOString()}`
-      if (state.sent[key]?.sentAt) continue
-
-      await sendTaskReminder(task, dueDate, key)
-      state.sent[key] = { sentAt: new Date().toISOString(), taskId: task.id, dueDate: dueDate.toISOString() }
-      await saveState()
-    }
-    pruneSentState()
-  } catch (err) {
-    logError('Failed to send due soon reminders', err)
-  }
-}
-
-async function getDueSoonTasks() {
-  const until = new Date(Date.now() + config.lookaheadDays * 24 * 60 * 60 * 1000)
-  return getTasks({
-    filter: `done = false && due_date <= '${until.toISOString()}'`,
-    sort_by: 'due_date',
-    order_by: 'asc',
-    per_page: '100',
-  })
 }
 
 async function getOpenTasks(search = '') {
@@ -141,39 +74,6 @@ async function getTasks(query) {
   const params = new URLSearchParams(query)
   const result = await vikunjaJson(`/api/v1/tasks?${params.toString()}`)
   return Array.isArray(result) ? result : result?.items || []
-}
-
-async function sendTaskReminder(task, dueDate, stateKey) {
-  const keyboard = {
-    inline_keyboard: [[
-      { text: text.keepaliveButton, callback_data: `done:${task.id}` },
-      { text: text.openTaskButton, url: taskUrl(task.id) },
-    ]],
-  }
-
-  for (const chatId of config.chatIds) {
-    await telegramJson('sendMessage', {
-      chat_id: chatId,
-      text: formatTaskMessage(task, dueDate),
-      parse_mode: 'HTML',
-      reply_markup: keyboard,
-      disable_web_page_preview: true,
-    })
-  }
-  log(`Sent reminder task=${task.id} title=${task.title} key=${stateKey}`)
-}
-
-function formatTaskMessage(task, dueDate) {
-  const project = task.project_id ? `#${task.project_id}` : '-'
-  return [
-    `<b>${text.dueSoonTitle}</b>`,
-    '',
-    `<b>${escapeHtml(task.title)}</b>`,
-    `${text.due}: ${escapeHtml(formatInTimezone(dueDate))}`,
-    `${text.project}: ${escapeHtml(project)}`,
-    '',
-    `${text.taskLink}: ${escapeHtml(taskUrl(task.id))}`,
-  ].join('\n')
 }
 
 async function pollTelegramUpdates() {
@@ -247,7 +147,6 @@ async function handleMessage(message) {
 
     if (command.startsWith('/keepalive')) {
       await handleKeepaliveCommand(chatId, raw.replace(/^\/keepalive(?:@\w+)?\s*/i, '').trim())
-      return
     }
   } catch (err) {
     logError(`Failed to handle command ${raw}`, err)
@@ -441,18 +340,6 @@ function escapeHtml(value) {
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
-}
-
-function pruneSentState() {
-  const cutoff = Date.now() - 90 * 24 * 60 * 60 * 1000
-  let changed = false
-  for (const [key, value] of Object.entries(state.sent)) {
-    if (Date.parse(value.sentAt) < cutoff) {
-      delete state.sent[key]
-      changed = true
-    }
-  }
-  if (changed) void saveState()
 }
 
 function log(message) {

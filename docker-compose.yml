@@ -2,10 +2,9 @@ services:
   init-permissions:
     image: alpine:3.20
     container_name: vikunja-init-permissions
-    command: ["sh", "-c", "mkdir -p /data/files /data/tg-reminder-bot && chown -R 1000:1000 /data/files /data/tg-reminder-bot"]
+    command: ["sh", "-c", "mkdir -p /data/files && chown -R 1000:1000 /data/files"]
     volumes:
       - ./docker-data/files:/data/files
-      - ./docker-data/tg-reminder-bot:/data/tg-reminder-bot
 
   db:
     image: postgres:16-alpine
@@ -45,6 +44,8 @@ services:
       VIKUNJA_DATABASE_USER: ${POSTGRES_USER:-vikunja}
       VIKUNJA_DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-change-this-db-password}
       VIKUNJA_DATABASE_SSLMODE: disable
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_CHAT_IDS: ${TELEGRAM_CHAT_IDS}
       TZ: ${TZ:-Asia/Shanghai}
     ports:
       - "${VIKUNJA_HOST_PORT:-17003}:3456"
@@ -67,10 +68,5 @@ services:
       VIKUNJA_API_URL: http://vikunja:3456
       VIKUNJA_PUBLIC_URL: ${VIKUNJA_PUBLIC_URL:-http://127.0.0.1:17003/}
       VIKUNJA_API_TOKEN: ${VIKUNJA_API_TOKEN}
-      TG_REMINDER_LOOKAHEAD_DAYS: ${TG_REMINDER_LOOKAHEAD_DAYS:-3}
-      TG_REMINDER_POLL_SECONDS: ${TG_REMINDER_POLL_SECONDS:-300}
-      TG_REMINDER_STATE_PATH: /data/state.json
       TZ: ${TZ:-Asia/Shanghai}
-    volumes:
-      - ./docker-data/tg-reminder-bot:/data
     restart: unless-stopped

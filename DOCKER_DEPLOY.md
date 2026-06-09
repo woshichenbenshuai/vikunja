@@ -1,6 +1,6 @@
 # Vikunja local Docker deployment
 
-This compose file builds Vikunja from this source tree and runs it with PostgreSQL and the Telegram reminder bot.
+This compose file builds Vikunja from this source tree and runs it with PostgreSQL and the Telegram command bot.
 
 ## Port
 
@@ -16,7 +16,7 @@ Open only this port if you are not using a reverse proxy:
 17003/tcp
 ```
 
-Do not expose PostgreSQL `5432` publicly. The Telegram bot uses long polling and does not need an inbound port.
+Do not expose PostgreSQL `5432` publicly. Telegram uses outbound requests only and does not need an inbound port.
 
 ## Start
 
@@ -56,11 +56,22 @@ Open Vikunja:
 http://your-server-ip:17003
 ```
 
-## Telegram Reminder Bot
+## Telegram Integration
 
-The bot pushes tasks whose due date is within `TG_REMINDER_LOOKAHEAD_DAYS` and are not done. Each message has a keepalive button. Pressing it marks the Vikunja task as done, which also triggers Vikunja's repeat logic.
+Vikunja sends Telegram reminders from its own reminder cron. That means the reminder time configured on a Vikunja task is the source of truth.
 
-It also supports Telegram commands:
+Example keepalive task setup:
+
+```text
+Due date: next keepalive date
+Reminder: due date - 3 days
+Repeat mode: after completion date
+Repeat interval: 10 days
+```
+
+When the task reminder time arrives, the Vikunja backend sends a Telegram message directly. The message contains a keepalive button. Pressing it marks the Vikunja task as done, which triggers Vikunja's repeat logic.
+
+The Telegram bot container is only used for commands and callback buttons:
 
 ```text
 /list
@@ -140,22 +151,14 @@ VIKUNJA_API_TOKEN=tk_xxx
 docker compose up -d --build
 ```
 
-The bot stores sent-reminder state in:
-
-```text
-docker-data/tg-reminder-bot/state.json
-```
-
-This prevents duplicate pushes for the same task due date.
-
 ## Fix Existing Permission Error
 
 If an older deployment created `docker-data/files` as `root`, run:
 
 ```bash
 docker compose down
-sudo mkdir -p docker-data/files docker-data/tg-reminder-bot
-sudo chown -R 1000:1000 docker-data/files docker-data/tg-reminder-bot
+sudo mkdir -p docker-data/files
+sudo chown -R 1000:1000 docker-data/files
 docker compose up -d --build
 ```
 
