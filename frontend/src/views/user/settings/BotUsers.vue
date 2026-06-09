@@ -38,6 +38,14 @@ const nameDraft = ref<Record<number, string>>({})
 const showDeleteModal = ref<boolean>(false)
 const botToDelete = ref<IUser>()
 
+function isNeverExpires(date: Date): boolean {
+	return date.getFullYear() >= 9999
+}
+
+function formatTokenExpiry(date: Date): string {
+	return isNeverExpires(date) ? t('user.settings.apiTokens.neverExpires') : formatDisplayDate(date)
+}
+
 async function loadBots() {
 	bots.value = await botService.getAll() as IUser[]
 	for (const bot of bots.value) {
@@ -261,7 +269,7 @@ onMounted(loadBots)
 								:key="token.id"
 							>
 								<td>{{ token.title }}</td>
-								<td>{{ formatDisplayDate(token.expiresAt) }}</td>
+								<td>{{ formatTokenExpiry(token.expiresAt) }}</td>
 								<td>{{ formatDisplayDate(token.created) }}</td>
 								<td class="has-text-end">
 									<XButton

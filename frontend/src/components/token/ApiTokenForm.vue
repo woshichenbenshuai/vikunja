@@ -35,6 +35,8 @@ const service = new ApiTokenService()
 const {t} = useI18n()
 const {store: timeFormat} = useTimeFormat()
 const now = new Date()
+const TOKEN_EXPIRY_NEVER = 'never'
+const NEVER_EXPIRES_AT = new Date('9999-12-31T23:59:59Z')
 
 const availableRoutes = ref(null)
 const newToken = ref<IApiToken>(new ApiTokenModel())
@@ -251,7 +253,9 @@ async function createToken() {
 	}
 
 	const expiry = Number(newTokenExpiry.value)
-	if (!isNaN(expiry)) {
+	if (newTokenExpiry.value === TOKEN_EXPIRY_NEVER) {
+		newToken.value.expiresAt = NEVER_EXPIRES_AT
+	} else if (!isNaN(expiry)) {
 		newToken.value.expiresAt = new Date((+new Date()) + expiry * MILLISECONDS_A_DAY)
 	} else {
 		newToken.value.expiresAt = new Date(newTokenExpiryCustom.value)
@@ -310,6 +314,9 @@ async function createToken() {
 						</option>
 						<option value="90">
 							{{ $t('user.settings.apiTokens.90d') }}
+						</option>
+						<option :value="TOKEN_EXPIRY_NEVER">
+							{{ $t('user.settings.apiTokens.neverExpires') }}
 						</option>
 						<option value="custom">
 							{{ $t('misc.custom') }}

@@ -159,6 +159,7 @@
 				"30d": "30 天",
 				"60d": "60 天",
 				"90d": "90 天",
+				"neverExpires": "永不过期",
 				"permissionExplanation": "权限允许您限制 api 令牌被允许做什么。",
 				"titleRequired": "需要指定标题",
 				"permissionRequired": "请从列表中选择至少一个权限。",

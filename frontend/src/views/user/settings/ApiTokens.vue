@@ -26,6 +26,14 @@ const route = useRoute()
 const initialTitle = ref('')
 const initialScopes = ref('')
 
+function isNeverExpires(date: Date): boolean {
+	return date.getFullYear() >= 9999
+}
+
+function formatTokenExpiry(date: Date): string {
+	return isNeverExpires(date) ? t('user.settings.apiTokens.neverExpires') : formatDisplayDate(date)
+}
+
 onMounted(async () => {
 	tokens.value = await service.getAll()
 
@@ -119,9 +127,9 @@ function onTokenCreated(token: IApiToken) {
 							</template>
 						</td>
 						<td>
-							{{ formatDisplayDate(tk.expiresAt) }}
+							{{ formatTokenExpiry(tk.expiresAt) }}
 							<p
-								v-if="tk.expiresAt < new Date()"
+								v-if="!isNeverExpires(tk.expiresAt) && tk.expiresAt < new Date()"
 								class="has-text-danger"
 							>
 								{{ $t('user.settings.apiTokens.expired', {ago: formatDateSince(tk.expiresAt)}) }}
