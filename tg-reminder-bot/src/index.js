@@ -38,6 +38,7 @@ const config = {
 
 const telegramBaseUrl = `https://api.telegram.org/bot${config.telegramToken}`
 let updateOffset = 0
+let pollingTelegram = false
 
 log(`Starting Vikunja Telegram command bot. chats=${config.chatIds.join(',')}`)
 
@@ -77,6 +78,8 @@ async function getTasks(query) {
 }
 
 async function pollTelegramUpdates() {
+  if (pollingTelegram) return
+  pollingTelegram = true
   try {
     const result = await telegramJson('getUpdates', {
       offset: updateOffset,
@@ -94,6 +97,8 @@ async function pollTelegramUpdates() {
     }
   } catch (err) {
     logError('Failed to poll Telegram updates', err)
+  } finally {
+    pollingTelegram = false
   }
 }
 
