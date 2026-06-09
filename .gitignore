@@ -21,6 +21,8 @@ secrets
 *.deb
 debian/
 logs/
+.env
+docker-data/
 docs/public/
 docs/resources/
 pkg/static/templates_vfsdata.go
