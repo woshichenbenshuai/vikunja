@@ -58,8 +58,6 @@ services:
       dockerfile: Dockerfile
     image: local/vikunja-tg-reminder-bot:dev
     container_name: vikunja-tg-reminder-bot
-    profiles:
-      - tg
     depends_on:
       vikunja:
         condition: service_started

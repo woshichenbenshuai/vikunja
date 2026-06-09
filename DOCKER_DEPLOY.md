@@ -1,6 +1,6 @@
 # Vikunja local Docker deployment
 
-This compose file builds Vikunja from this source tree and runs it with PostgreSQL.
+This compose file builds Vikunja from this source tree and runs it with PostgreSQL and the Telegram reminder bot.
 
 ## Port
 
@@ -26,15 +26,18 @@ Create a local env file first:
 cp .env.example .env
 ```
 
-Edit `.env` and set:
+Edit `.env` and set the required values:
 
 ```env
 VIKUNJA_PUBLIC_URL=http://your-server-ip:17003/
 POSTGRES_PASSWORD=your-db-password
 VIKUNJA_SERVICE_SECRET=your-long-random-secret
+TELEGRAM_BOT_TOKEN=123456:your-telegram-bot-token
+TELEGRAM_CHAT_IDS=123456789
+VIKUNJA_API_TOKEN=tk_xxx
 ```
 
-Then start Vikunja:
+Then start everything:
 
 ```bash
 docker compose up -d --build
@@ -44,9 +47,10 @@ Check logs:
 
 ```bash
 docker compose logs -f vikunja
+docker compose logs -f tg-reminder-bot
 ```
 
-Open:
+Open Vikunja:
 
 ```text
 http://your-server-ip:17003
@@ -54,7 +58,7 @@ http://your-server-ip:17003
 
 ## Telegram Reminder Bot
 
-The bot pushes tasks whose due date is within `TG_REMINDER_LOOKAHEAD_DAYS` and are not done. Each message has a `完成签到` button. Pressing it marks the Vikunja task as done, which also triggers Vikunja's repeat logic.
+The bot pushes tasks whose due date is within `TG_REMINDER_LOOKAHEAD_DAYS` and are not done. Each message has a keepalive button. Pressing it marks the Vikunja task as done, which also triggers Vikunja's repeat logic.
 
 It also supports Telegram commands:
 
@@ -81,7 +85,13 @@ TELEGRAM_BOT_TOKEN=123456:your-token
 
 ### 2. Get your chat id
 
-Send any message to your bot, then open this URL in a browser:
+`TELEGRAM_CHAT_IDS` is the chat that should receive messages from the bot. It is not the bot token.
+
+For a private chat:
+
+1. Open your bot in Telegram.
+2. Send `/start` or any message to it.
+3. Open this URL in a browser:
 
 ```text
 https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/getUpdates
@@ -93,13 +103,17 @@ Find `message.chat.id` and put it in `.env`:
 TELEGRAM_CHAT_IDS=123456789
 ```
 
+For a group chat, add the bot to the group, send a message in the group, then use the same `getUpdates` URL. Group chat ids are often negative numbers.
+
 Multiple chat ids are comma-separated:
 
 ```env
-TELEGRAM_CHAT_IDS=123456789,987654321
+TELEGRAM_CHAT_IDS=123456789,-987654321
 ```
 
 ### 3. Create Vikunja API token
+
+`VIKUNJA_API_TOKEN` is a Vikunja access token. The Telegram bot uses it to query tasks and mark tasks as done on your behalf.
 
 In Vikunja Web UI:
 
@@ -114,22 +128,16 @@ tasks: read one, read all, update
 projects: read all, read one
 ```
 
-Copy the token once and put it in `.env`:
+Set a long expiration date if this bot should run long term. Copy the token once and put it in `.env`:
 
 ```env
 VIKUNJA_API_TOKEN=tk_xxx
 ```
 
-### 4. Start with bot profile
+### 4. Start
 
 ```bash
-docker compose --profile tg up -d --build
-```
-
-Check bot logs:
-
-```bash
-docker compose logs -f tg-reminder-bot
+docker compose up -d --build
 ```
 
 The bot stores sent-reminder state in:
